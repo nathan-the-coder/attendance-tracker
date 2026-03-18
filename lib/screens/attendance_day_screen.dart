@@ -1,0 +1,502 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../models/attendance_record.dart';
+import '../providers/day_provider.dart';
+
+class AttendanceDayScreen extends StatefulWidget {
+  final String dayId;
+
+  const AttendanceDayScreen({super.key, required this.dayId});
+
+  @override
+  State<AttendanceDayScreen> createState() => _AttendanceDayScreenState();
+}
+
+class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
+  int _selectedFilter = 0;
+
+  void _showFolderOptions() {
+    final dayProvider = context.read<DayProvider>();
+    final day = dayProvider.days.firstWhere((d) => d.id == widget.dayId);
+    
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.calendar_today,
+                size: 32,
+                color: Color(0xFF8B5CF6),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              day.name,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              '${day.records.length} records',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 24),
+            ListTile(
+              leading: const Icon(Icons.edit, color: Color(0xFF2563EB)),
+              title: const Text('Rename Day'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showRenameDialog(day.name);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.clear_all, color: Colors.orange),
+              title: const Text('Clear All Records'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmClearRecords();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Day', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmDeleteDay(day.name);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRenameDialog(String currentName) {
+    final controller = TextEditingController(text: currentName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit, color: Color(0xFF2563EB)),
+            SizedBox(width: 8),
+            Text('Rename Day'),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: 'Day Name',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                context.read<DayProvider>().renameDay(widget.dayId, controller.text.trim());
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearRecords() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Clear All Records?'),
+        content: const Text('This will remove all attendance records for this day.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<DayProvider>().clearDayRecords(widget.dayId);
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteDay(String dayName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Day?'),
+        content: Text('Delete "$dayName"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<DayProvider>().deleteDay(widget.dayId);
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: Consumer<DayProvider>(
+          builder: (context, dayProvider, child) {
+            final day = dayProvider.days.firstWhere(
+              (d) => d.id == widget.dayId,
+              orElse: () => Day(id: '', name: 'Day', createdAt: DateTime.now()),
+            );
+            return Text(
+              day.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            );
+          },
+        ),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF8B5CF6),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: _showFolderOptions,
+          ),
+        ],
+      ),
+      body: Consumer<DayProvider>(
+        builder: (context, dayProvider, child) {
+          final day = dayProvider.days.firstWhere(
+            (d) => d.id == widget.dayId,
+            orElse: () => Day(id: '', name: '', createdAt: DateTime.now(), records: []),
+          );
+
+          if (day.records.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No attendance records',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scan QR codes to record attendance',
+                    style: TextStyle(color: Colors.grey[400]),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          List<AttendanceRecord> filteredRecords;
+          if (_selectedFilter == 1) {
+            filteredRecords = day.records.where((r) => r.type == AttendanceType.timeIn).toList();
+          } else if (_selectedFilter == 2) {
+            filteredRecords = day.records.where((r) => r.type == AttendanceType.timeOut).toList();
+          } else {
+            filteredRecords = day.records;
+          }
+
+          return Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF8B5CF6),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildFilterButton(0, 'All', Icons.list),
+                    _buildFilterButton(1, 'Time In', Icons.login),
+                    _buildFilterButton(2, 'Time Out', Icons.logout),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedFilter == 0 
+                          ? 'All Records'
+                          : _selectedFilter == 1 
+                              ? 'Time In Records'
+                              : 'Time Out Records',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    Text(
+                      '${filteredRecords.length} records',
+                      style: TextStyle(color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: filteredRecords.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No ${_selectedFilter == 1 ? "Time In" : _selectedFilter == 2 ? "Time Out" : ""} records',
+                          style: TextStyle(color: Colors.grey[500]),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredRecords.length,
+                        itemBuilder: (context, index) {
+                          final record = filteredRecords[index];
+                          final timeFormat = DateFormat('h:mm a');
+                          final isTimeIn = record.type == AttendanceType.timeIn;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: IntrinsicHeight(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    decoration: BoxDecoration(
+                                      color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(16),
+                                        bottomLeft: Radius.circular(16),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 50,
+                                            height: 50,
+                                            decoration: BoxDecoration(
+                                              color: isTimeIn
+                                                  ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                                                  : const Color(0xFFEF4444).withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              isTimeIn ? Icons.login : Icons.logout,
+                                              color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  record.student.fullName,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                    color: Color(0xFF1F2937),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF3F4F6),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                      ),
+                                                      child: Text(
+                                                        record.student.program,
+                                                        style: const TextStyle(fontSize: 12),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF3F4F6),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                      ),
+                                                      child: Text(
+                                                        record.student.year,
+                                                        style: const TextStyle(fontSize: 12),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                timeFormat.format(record.timestamp),
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                  color: Color(0xFF1F2937),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  isTimeIn ? 'IN' : 'OUT',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilterButton(int index, String label, IconData icon) {
+    final isSelected = _selectedFilter == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedFilter = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? const Color(0xFF8B5CF6) : Colors.white70,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? const Color(0xFF8B5CF6) : Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

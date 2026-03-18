@@ -1,0 +1,583 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../models/student.dart';
+import '../models/attendance_record.dart';
+import '../providers/day_provider.dart';
+
+class ScannerScreen extends StatefulWidget {
+  const ScannerScreen({super.key});
+
+  @override
+  State<ScannerScreen> createState() => _ScannerScreenState();
+}
+
+class _ScannerScreenState extends State<ScannerScreen> {
+  MobileScannerController? _controller;
+  String? _lastScannedCode;
+  int _selectedFilter = 1;
+  bool _isProcessing = false;
+  final TextEditingController _manualInputController = TextEditingController();
+  bool _showManualInput = false;
+
+  bool get _isWeb => kIsWeb;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_isWeb) {
+      _controller = MobileScannerController(
+        detectionSpeed: DetectionSpeed.normal,
+        facing: CameraFacing.back,
+        formats: [BarcodeFormat.qrCode],
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _manualInputController.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_isProcessing) return;
+    
+    final List<Barcode> barcodes = capture.barcodes;
+    for (final barcode in barcodes) {
+      if (barcode.format != BarcodeFormat.qrCode) continue;
+      
+      final String? code = barcode.rawValue;
+      if (code != null && code != _lastScannedCode) {
+        _lastScannedCode = code;
+        _isProcessing = true;
+        _processQrCode(code);
+        break;
+      }
+    }
+  }
+
+  void _processQrCode(String qrData) {
+    try {
+      final student = Student.fromJsonString(qrData);
+      _autoRecordAttendance(student);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid QR code'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      _resetScanner();
+    }
+  }
+
+  void _processManualInput() {
+    final input = _manualInputController.text.trim();
+    if (input.isNotEmpty) {
+      _processQrCode(input);
+      _manualInputController.clear();
+      setState(() {
+        _showManualInput = false;
+      });
+    }
+  }
+
+  void _autoRecordAttendance(Student student) {
+    final dayProvider = context.read<DayProvider>();
+    
+    if (dayProvider.selectedDayId == null) {
+      _showErrorSnackBar('Please select a Day first');
+      return;
+    }
+
+    final AttendanceType type = _selectedFilter == 1 ? AttendanceType.timeIn : AttendanceType.timeOut;
+    final dayId = dayProvider.selectedDayId!;
+
+    if (type == AttendanceType.timeIn && dayProvider.hasTimeIn(dayId, student.id)) {
+      _showWarningSnackBar('${student.fullName} already timed in');
+      return;
+    }
+
+    if (type == AttendanceType.timeOut && dayProvider.hasTimeOut(dayId, student.id)) {
+      _showWarningSnackBar('${student.fullName} already timed out');
+      return;
+    }
+
+    final record = AttendanceRecord(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      student: student,
+      timestamp: DateTime.now(),
+      type: type,
+    );
+
+    dayProvider.addRecordToDay(dayId, record);
+
+    final dateFormat = DateFormat('MMMM dd');
+    final timeFormat = DateFormat('h:mm a');
+    final typeText = type == AttendanceType.timeIn ? 'Time In' : 'Time Out';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              type == AttendanceType.timeIn ? Icons.login : Icons.logout,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${student.fullName} ${student.program} ${student.year}\n$typeText • ${dateFormat.format(record.timestamp)} ${timeFormat.format(record.timestamp)}',
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: type == AttendanceType.timeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+
+    _resetScanner();
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    _resetScanner();
+  }
+
+  void _showWarningSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    _resetScanner();
+  }
+
+  void _resetScanner() {
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _lastScannedCode = null;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text(
+          'Scan QR Code',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
+        backgroundColor: const Color(0xFFF59E0B),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          if (_isWeb)
+            IconButton(
+              icon: Icon(_showManualInput ? Icons.qr_code : Icons.keyboard),
+              onPressed: () {
+                setState(() {
+                  _showManualInput = !_showManualInput;
+                });
+              },
+              tooltip: _showManualInput ? 'Use Scanner' : 'Manual Input',
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildDaySelector(),
+          Container(
+            margin: const EdgeInsets.all(16),
+            height: _isWeb ? 0 : MediaQuery.of(context).size.height * 0.25,
+            child: _isWeb
+                ? (_showManualInput ? _buildManualInput() : _buildWebPlaceholder())
+                : _buildScanner(),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildFilterButton(1, 'Time In', Icons.login),
+                _buildFilterButton(2, 'Time Out', Icons.logout),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _buildRecordsList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDaySelector() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.white,
+      child: Consumer<DayProvider>(
+        builder: (context, dayProvider, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F7FA),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: dayProvider.selectedDayId,
+                isExpanded: true,
+                hint: const Text('Select Day'),
+                icon: const Icon(Icons.calendar_today, size: 18),
+                items: dayProvider.days.map((day) {
+                  return DropdownMenuItem(
+                    value: day.id,
+                    child: Text(day.name),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    dayProvider.selectDay(value);
+                  }
+                },
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildScanner() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          children: [
+            MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
+            ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                    width: 3,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _selectedFilter == 1 
+                        ? const Color(0xFF10B981).withValues(alpha: 0.9)
+                        : const Color(0xFFEF4444).withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _selectedFilter == 1 ? 'Recording: Time In' : 'Recording: Time Out',
+                    style: const TextStyle(
+                      color: Colors.white, 
+                      fontSize: 14, 
+                      fontWeight: FontWeight.bold
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebPlaceholder() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.camera_alt, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Camera not available on web',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _showManualInput = true;
+              });
+            },
+            icon: const Icon(Icons.keyboard),
+            label: const Text('Enter QR Data'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualInput() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Enter QR Data',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _manualInputController,
+            maxLines: 2,
+            decoration: InputDecoration(
+              hintText: 'Paste QR JSON data here...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _processManualInput,
+            icon: const Icon(Icons.qr_code),
+            label: const Text('Submit'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordsList() {
+    return Consumer<DayProvider>(
+      builder: (context, dayProvider, child) {
+        final day = dayProvider.selectedDay;
+        if (day == null) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.calendar_today, size: 48, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                Text(
+                  'No Day selected',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Create a Day in Attendance to start',
+                  style: TextStyle(color: Colors.grey[400]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        List<AttendanceRecord> filteredRecords;
+        if (_selectedFilter == 1) {
+          filteredRecords = day.records.where((r) => r.type == AttendanceType.timeIn).toList();
+        } else {
+          filteredRecords = day.records.where((r) => r.type == AttendanceType.timeOut).toList();
+        }
+
+        if (filteredRecords.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox, size: 48, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                Text(
+                  'No ${_selectedFilter == 1 ? "Time In" : "Time Out"} records',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: filteredRecords.length,
+          itemBuilder: (context, index) {
+            final record = filteredRecords[index];
+            final timeFormat = DateFormat('MMMM dd h:mm a');
+            final isTimeIn = record.type == AttendanceType.timeIn;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isTimeIn
+                        ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                        : const Color(0xFFEF4444).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    isTimeIn ? Icons.login : Icons.logout,
+                    color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  ),
+                ),
+                title: Text(
+                  '${record.student.fullName} ${record.student.program} ${record.student.year}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${isTimeIn ? "Time In" : "Time Out"} • ${timeFormat.format(record.timestamp)}',
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isTimeIn ? 'IN' : 'OUT',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterButton(int index, String label, IconData icon) {
+    final isSelected = _selectedFilter == index;
+    final color = index == 1 ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedFilter = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? color : Colors.grey[300]!),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? color.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? Colors.white : Colors.grey[600],
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[600],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
