@@ -1,10 +1,13 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version_type:
-        description: 'Version bump type'
+        description: 'Version bump type (only for manual trigger)'
         required: true
         default: 'patch'
         type: choice
@@ -58,24 +61,35 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          git fetch --tags
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Latest tag: $LATEST_TAG"
+          # Check if this was triggered by a tag push
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Auto-triggered by tag: use the tag version directly
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            NEW_VERSION="${TAG_NAME#v}"
+            VERSION_CODE=$(echo $NEW_VERSION | awk -F. '{print $1*10000 + $2*100 + $3}')
+            echo "Triggered by tag: $TAG_NAME"
+          else
+            # Manual trigger: calculate next version
+            git fetch --tags
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            echo "Latest tag: $LATEST_TAG"
+            
+            VERSION_TYPE=${{ github.event.inputs.version_type }}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST_TAG:1}"
+            MAJOR=${MAJOR:-0}
+            MINOR=${MINOR:-0}
+            PATCH=${PATCH:-0}
+            
+            case $VERSION_TYPE in
+              major) ((MAJOR++)); MINOR=0; PATCH=0 ;;
+              minor) ((MINOR++)); PATCH=0 ;;
+              patch) ((PATCH++)) ;;
+            esac
+            
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          fi
           
-          VERSION_TYPE=${{ github.event.inputs.version_type }}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST_TAG:1}"
-          MAJOR=${MAJOR:-0}
-          MINOR=${MINOR:-0}
-          PATCH=${PATCH:-0}
-          
-          case $VERSION_TYPE in
-            major) ((MAJOR++)); MINOR=0; PATCH=0 ;;
-            minor) ((MINOR++)); PATCH=0 ;;
-            patch) ((PATCH++)) ;;
-          esac
-          
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "tag_name=v$NEW_VERSION" >> $GITHUB_OUTPUT
@@ -110,7 +124,8 @@ jobs:
             --obfuscate \
             --split-debug-info=./build/debug-info
 
-      - name: Commit and tag
+      - name: Commit and tag (manual only)
+        if: github.event.inputs.version_type != ''
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "GitHub Actions"
