@@ -100,16 +100,6 @@ jobs:
           sed -i 's/^version: .*/version: ${{ steps.version.outputs.new_version }}+1/' pubspec.yaml
           cat pubspec.yaml | grep "^version:"
 
-      - name: Update version in build.gradle.kts
-        run: |
-          cd android/app
-          # Get current versionName and replace
-          sed -i "s/versionName = \".*\"/versionName = \"${{ steps.version.outputs.new_version }}\"/" build.gradle.kts
-          # Get current versionCode and replace
-          sed -i "s/versionCode = [0-9]*/versionCode = ${{ steps.version.outputs.version_code }}/" build.gradle.kts
-          cd ../..
-          cat android/app/build.gradle.kts | grep -E "versionName|versionCode"
-
       - name: Build APK (Release)
         run: |
           flutter build apk --release \
@@ -129,7 +119,7 @@ jobs:
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "GitHub Actions"
-          git add pubspec.yaml android/app/build.gradle.kts
+          git add pubspec.yaml
           git commit -m "Bump version to ${{ steps.version.outputs.new_version }}"
           git tag ${{ steps.version.outputs.tag_name }}
           git push --follow-tags
