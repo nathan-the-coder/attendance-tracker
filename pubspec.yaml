@@ -7,25 +7,25 @@ repository: https://github.com/Lazy-Shadow/attendance-tracker
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.10.7
+  sdk: ^3.5.0
 
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
   qr_flutter: ^4.1.0
-  mobile_scanner: ^7.0.1
+  mobile_scanner: ^5.0.0
   provider: ^6.1.2
   shared_preferences: ^2.3.4
   uuid: ^4.5.1
   intl: ^0.20.2
   path_provider: ^2.1.5
-  firebase_core: ^4.5.0
-  cloud_firestore: ^6.1.3
-  firebase_ui_auth: ^3.0.1
+  firebase_core: ^2.30.0
+  cloud_firestore: ^4.17.0
+  firebase_ui_auth: ^1.12.0
   excel: ^4.0.6
   flutter_launcher_icons: ^0.14.4
-  connectivity_plus: ^6.1.1
+  connectivity_plus: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -36,7 +36,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^6.0.0
+  flutter_lints: ^3.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
