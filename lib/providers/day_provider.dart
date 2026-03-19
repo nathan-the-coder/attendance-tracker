@@ -509,18 +509,17 @@ class DayProvider extends ChangeNotifier {
     try {
       Directory? directory;
       if (Platform.isAndroid) {
+        // For Android 10+, use app's external storage
+        // This doesn't require any permissions
         final extDir = await getExternalStorageDirectory();
         if (extDir != null) {
-          final downloadsPath = extDir.path.replaceFirst(
-            RegExp(r'/Android/data/[^/]+/files'),
-            '/Download',
-          );
-          directory = Directory(downloadsPath);
-          if (!await directory.exists()) {
-            directory = Directory('/storage/emulated/0/Download');
+          final exportDir = Directory('${extDir.path}/Exports');
+          if (!await exportDir.exists()) {
+            await exportDir.create(recursive: true);
           }
+          directory = exportDir;
         } else {
-          directory = Directory('/storage/emulated/0/Download');
+          directory = await getApplicationDocumentsDirectory();
         }
       } else {
         directory =

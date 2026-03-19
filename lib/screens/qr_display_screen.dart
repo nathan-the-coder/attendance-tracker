@@ -38,7 +38,7 @@ class QrDisplayScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('QR saved to Downloads/$fileName'),
+            content: Text('QR saved to ${directory.path}/$fileName'),
             backgroundColor: const Color(0xFF457507),
             duration: const Duration(seconds: 4),
           ),
@@ -58,23 +58,19 @@ class QrDisplayScreen extends StatelessWidget {
 
   Future<Directory?> _getDownloadsDirectory() async {
     if (Platform.isAndroid) {
+      // For Android 10+, use app's external storage
+      // This doesn't require any permissions
       final directory = await getExternalStorageDirectory();
       if (directory != null) {
-        final downloadsPath = directory.path.replaceFirst(
-          RegExp(r'/Android/data/[^/]+/files'),
-          '/Download',
-        );
-        final downloadsDir = Directory(downloadsPath);
-        if (!await downloadsDir.exists()) {
-          downloadsDir.createSync(recursive: true);
+        // Create a QR_Codes folder in app's external storage
+        final qrDir = Directory('${directory.path}/QR_Codes');
+        if (!await qrDir.exists()) {
+          await qrDir.create(recursive: true);
         }
-        return downloadsDir;
+        return qrDir;
       }
-      final fallbackDir = Directory('/storage/emulated/0/Download');
-      if (!await fallbackDir.exists()) {
-        fallbackDir.createSync(recursive: true);
-      }
-      return fallbackDir;
+      // Fallback to app documents directory
+      return await getApplicationDocumentsDirectory();
     }
     if (Platform.isIOS) {
       return await getApplicationDocumentsDirectory();

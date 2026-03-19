@@ -188,18 +188,17 @@ class FolderProvider extends ChangeNotifier {
       Directory? directory;
 
       if (Platform.isAndroid) {
+        // For Android 10+, use app's external storage
+        // This doesn't require any permissions
         final extDir = await getExternalStorageDirectory();
         if (extDir != null) {
-          final downloadsPath = extDir.path.replaceFirst(
-            RegExp(r'/Android/data/[^/]+/files'),
-            '/Download',
-          );
-          directory = Directory(downloadsPath);
-          if (!await directory.exists()) {
-            directory = Directory('/storage/emulated/0/Download');
+          final qrDir = Directory('${extDir.path}/QR_Codes');
+          if (!await qrDir.exists()) {
+            await qrDir.create(recursive: true);
           }
+          directory = qrDir;
         } else {
-          directory = Directory('/storage/emulated/0/Download');
+          directory = await getApplicationDocumentsDirectory();
         }
       } else {
         directory =
