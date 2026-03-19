@@ -23,8 +23,25 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
   String? _selectedProgram;
   final Uuid _uuid = const Uuid();
 
-  final List<String> _years = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year'];
-  final List<String> _programs = ['BSIT', 'BSCS', 'BSBA', 'BSA', 'ABPOLSOC', 'ABENG', 'ABPSYCH', 'BSCE', 'BSEE', 'BSME'];
+  final List<String> _years = [
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    '4th Year',
+    '5th Year',
+  ];
+  final List<String> _programs = [
+    'BSIT',
+    'BSCS',
+    'BSBA',
+    'BSA',
+    'ABPOLSOC',
+    'ABENG',
+    'ABPSYCH',
+    'BSCE',
+    'BSEE',
+    'BSME',
+  ];
 
   @override
   void dispose() {
@@ -63,10 +80,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                 children: [
                   const Text(
                     'Add Student',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
@@ -110,7 +124,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _firstNameController,
-                              decoration: _inputDecoration('First Name', Icons.person_outline),
+                              decoration: _inputDecoration(
+                                'First Name',
+                                Icons.person_outline,
+                              ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Please enter first name';
@@ -121,7 +138,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _middleNameController,
-                              decoration: _inputDecoration('Middle Name', Icons.person_outline),
+                              decoration: _inputDecoration(
+                                'Middle Name',
+                                Icons.person_outline,
+                              ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Please enter middle name';
@@ -132,7 +152,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _lastNameController,
-                              decoration: _inputDecoration('Last Name', Icons.person_outline),
+                              decoration: _inputDecoration(
+                                'Last Name',
+                                Icons.person_outline,
+                              ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Please enter last name';
@@ -142,7 +165,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                             ),
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
-                              decoration: _inputDecoration('Year', Icons.school),
+                              decoration: _inputDecoration(
+                                'Year',
+                                Icons.school,
+                              ),
                               items: _years.map((year) {
                                 return DropdownMenuItem(
                                   value: year,
@@ -163,7 +189,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                             ),
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
-                              decoration: _inputDecoration('Program', Icons.book),
+                              decoration: _inputDecoration(
+                                'Program',
+                                Icons.book,
+                              ),
                               items: _programs.map((program) {
                                 return DropdownMenuItem(
                                   value: program,
@@ -189,7 +218,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                       Container(
                         height: 56,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
+                          color: const Color(0xFF457507),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: ElevatedButton(
@@ -256,7 +285,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
           builder: (context) => QrDisplayScreen(
             student: student,
             onDelete: () {
-              context.read<FolderProvider>().removeStudentFromFolder(widget.folderId, student.id);
+              context.read<FolderProvider>().removeStudentFromFolder(
+                widget.folderId,
+                student.id,
+              );
             },
           ),
         ),
@@ -266,8 +298,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
 
   void _showFolderOptions() {
     final folderProvider = context.read<FolderProvider>();
-    final folder = folderProvider.folders.firstWhere((f) => f.id == widget.folderId);
-    
+    final folder = folderProvider.folders.firstWhere(
+      (f) => f.id == widget.folderId,
+    );
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -303,10 +337,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
             const SizedBox(height: 12),
             Text(
               folder.name,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             Text(
               '${folder.students.length} students',
@@ -322,7 +353,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.download, color: Color(0xFF10B981)),
+              leading: const Icon(Icons.download, color: Color(0xFF457507)),
               title: const Text('Download All QR Codes'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -330,14 +361,17 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Downloaded ${folder.name} folder'),
-                    backgroundColor: const Color(0xFF10B981),
+                    backgroundColor: const Color(0xFF457507),
                   ),
                 );
               },
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete Section', style: TextStyle(color: Colors.red)),
+              title: const Text(
+                'Delete Section',
+                style: TextStyle(color: Colors.red),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDeleteFolder(folder.name);
@@ -366,9 +400,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
           controller: controller,
           decoration: InputDecoration(
             labelText: 'Section Name',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
           autofocus: true,
         ),
@@ -380,7 +412,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
-                context.read<FolderProvider>().renameFolder(widget.folderId, controller.text.trim());
+                context.read<FolderProvider>().renameFolder(
+                  widget.folderId,
+                  controller.text.trim(),
+                );
                 Navigator.pop(ctx);
               }
             },
@@ -428,16 +463,14 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
     return InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon, color: Colors.grey[600]),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey[300]!),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+        borderSide: const BorderSide(color: Color(0xFF457507), width: 2),
       ),
       filled: true,
       fillColor: const Color(0xFFFAFAFA),
@@ -453,7 +486,8 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
           builder: (context, folderProvider, child) {
             final folder = folderProvider.folders.firstWhere(
               (f) => f.id == widget.folderId,
-              orElse: () => Folder(id: '', name: 'Section', createdAt: DateTime.now()),
+              orElse: () =>
+                  Section(id: '', name: 'Section', createdAt: DateTime.now()),
             );
             return Text(
               folder.name,
@@ -462,7 +496,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
           },
         ),
         centerTitle: true,
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: const Color(0xFF457507),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -476,7 +510,12 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
         builder: (context, folderProvider, child) {
           final folder = folderProvider.folders.firstWhere(
             (f) => f.id == widget.folderId,
-            orElse: () => Folder(id: '', name: '', createdAt: DateTime.now(), students: []),
+            orElse: () => Section(
+              id: '',
+              name: '',
+              createdAt: DateTime.now(),
+              students: [],
+            ),
           );
 
           if (folder.students.isEmpty) {
@@ -531,13 +570,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                      color: const Color(0xFF457507).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.person,
-                      color: Color(0xFF10B981),
-                    ),
+                    child: const Icon(Icons.person, color: Color(0xFF457507)),
                   ),
                   title: Text(
                     student.fullName,
@@ -548,7 +584,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.qr_code, color: Color(0xFF2563EB)),
+                        icon: const Icon(
+                          Icons.qr_code,
+                          color: Color(0xFF2563EB),
+                        ),
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -556,7 +595,12 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                               builder: (context) => QrDisplayScreen(
                                 student: student,
                                 onDelete: () {
-                                  context.read<FolderProvider>().removeStudentFromFolder(widget.folderId, student.id);
+                                  context
+                                      .read<FolderProvider>()
+                                      .removeStudentFromFolder(
+                                        widget.folderId,
+                                        student.id,
+                                      );
                                 },
                               ),
                             ),
@@ -567,7 +611,10 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () {
-                          folderProvider.removeStudentFromFolder(widget.folderId, student.id);
+                          folderProvider.removeStudentFromFolder(
+                            widget.folderId,
+                            student.id,
+                          );
                         },
                       ),
                     ],
@@ -580,7 +627,7 @@ class _FolderSectionScreenState extends State<FolderSectionScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddStudentDialog,
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: const Color(0xFF457507),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Add Student'),

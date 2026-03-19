@@ -15,11 +15,13 @@ class AttendanceDayScreen extends StatefulWidget {
 
 class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
   int _selectedFilter = 0;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   void _showFolderOptions() {
     final dayProvider = context.read<DayProvider>();
     final day = dayProvider.days.firstWhere((d) => d.id == widget.dayId);
-    
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -55,10 +57,7 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
             const SizedBox(height: 12),
             Text(
               day.name,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             Text(
               '${day.records.length} records',
@@ -83,7 +82,10 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete Day', style: TextStyle(color: Colors.red)),
+              title: const Text(
+                'Delete Day',
+                style: TextStyle(color: Colors.red),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDeleteDay(day.name);
@@ -112,9 +114,7 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
           controller: controller,
           decoration: InputDecoration(
             labelText: 'Day Name',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
           autofocus: true,
         ),
@@ -126,7 +126,10 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
-                context.read<DayProvider>().renameDay(widget.dayId, controller.text.trim());
+                context.read<DayProvider>().renameDay(
+                  widget.dayId,
+                  controller.text.trim(),
+                );
                 Navigator.pop(ctx);
               }
             },
@@ -147,7 +150,9 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Clear All Records?'),
-        content: const Text('This will remove all attendance records for this day.'),
+        content: const Text(
+          'This will remove all attendance records for this day.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -199,6 +204,54 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _exportToExcel() async {
+    final dayProvider = context.read<DayProvider>();
+    final scaffold = ScaffoldMessenger.of(context);
+
+    scaffold.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 16),
+            Text('Exporting...'),
+          ],
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    final path = await dayProvider.exportToExcel(widget.dayId);
+
+    scaffold.hideCurrentSnackBar();
+    if (path != null) {
+      scaffold.showSnackBar(
+        SnackBar(
+          content: Text('Exported to $path'),
+          backgroundColor: const Color(0xFF457507),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      scaffold.showSnackBar(
+        const SnackBar(
+          content: Text('Export failed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -221,6 +274,11 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
         elevation: 0,
         actions: [
           IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _exportToExcel,
+            tooltip: 'Export to Excel',
+          ),
+          IconButton(
             icon: const Icon(Icons.more_vert),
             onPressed: _showFolderOptions,
           ),
@@ -230,7 +288,8 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
         builder: (context, dayProvider, child) {
           final day = dayProvider.days.firstWhere(
             (d) => d.id == widget.dayId,
-            orElse: () => Day(id: '', name: '', createdAt: DateTime.now(), records: []),
+            orElse: () =>
+                Day(id: '', name: '', createdAt: DateTime.now(), records: []),
           );
 
           if (day.records.isEmpty) {
@@ -242,10 +301,7 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                   const SizedBox(height: 16),
                   Text(
                     'No attendance records',
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.grey[500], fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -258,12 +314,30 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
           }
 
           List<AttendanceRecord> filteredRecords;
+
+          // First, apply type filter (All/Time In/Time Out)
           if (_selectedFilter == 1) {
-            filteredRecords = day.records.where((r) => r.type == AttendanceType.timeIn).toList();
+            filteredRecords = day.records
+                .where((r) => r.type == AttendanceType.timeIn)
+                .toList();
           } else if (_selectedFilter == 2) {
-            filteredRecords = day.records.where((r) => r.type == AttendanceType.timeOut).toList();
+            filteredRecords = day.records
+                .where((r) => r.type == AttendanceType.timeOut)
+                .toList();
           } else {
-            filteredRecords = day.records;
+            filteredRecords = List.from(day.records);
+          }
+
+          // Second, apply search filter
+          if (_searchQuery.isNotEmpty) {
+            final lowerQuery = _searchQuery.toLowerCase();
+            filteredRecords = filteredRecords.where((record) {
+              return record.student.fullName.toLowerCase().contains(
+                    lowerQuery,
+                  ) ||
+                  record.student.program.toLowerCase().contains(lowerQuery) ||
+                  record.student.year.toLowerCase().contains(lowerQuery);
+            }).toList();
           }
 
           return Column(
@@ -277,12 +351,54 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                     bottomRight: Radius.circular(24),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                child: Column(
                   children: [
-                    _buildFilterButton(0, 'All', Icons.list),
-                    _buildFilterButton(1, 'Time In', Icons.login),
-                    _buildFilterButton(2, 'Time Out', Icons.logout),
+                    // Search bar
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        style: const TextStyle(fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'Search student...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 20),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = '';
+                                    });
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _searchQuery = value;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Filter buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildFilterButton(0, 'All', Icons.list),
+                        _buildFilterButton(1, 'Time In', Icons.login),
+                        _buildFilterButton(2, 'Time Out', Icons.logout),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -293,11 +409,13 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _selectedFilter == 0 
+                      _searchQuery.isNotEmpty
+                          ? 'Search Results'
+                          : _selectedFilter == 0
                           ? 'All Records'
-                          : _selectedFilter == 1 
-                              ? 'Time In Records'
-                              : 'Time Out Records',
+                          : _selectedFilter == 1
+                          ? 'Time In Records'
+                          : 'Time Out Records',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -315,9 +433,28 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
               Expanded(
                 child: filteredRecords.isEmpty
                     ? Center(
-                        child: Text(
-                          'No ${_selectedFilter == 1 ? "Time In" : _selectedFilter == 2 ? "Time Out" : ""} records',
-                          style: TextStyle(color: Colors.grey[500]),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _searchQuery.isNotEmpty
+                                  ? Icons.search_off
+                                  : Icons.inbox_outlined,
+                              size: 64,
+                              color: Colors.grey[300],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _searchQuery.isNotEmpty
+                                  ? 'No students found'
+                                  : 'No ${_selectedFilter == 1
+                                        ? "Time In"
+                                        : _selectedFilter == 2
+                                        ? "Time Out"
+                                        : ""} records',
+                              style: TextStyle(color: Colors.grey[500]),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(
@@ -347,7 +484,9 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                                   Container(
                                     width: 6,
                                     decoration: BoxDecoration(
-                                      color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                      color: isTimeIn
+                                          ? const Color(0xFF457507)
+                                          : const Color(0xFFEF4444),
                                       borderRadius: const BorderRadius.only(
                                         topLeft: Radius.circular(16),
                                         bottomLeft: Radius.circular(16),
@@ -364,19 +503,29 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                                             height: 50,
                                             decoration: BoxDecoration(
                                               color: isTimeIn
-                                                  ? const Color(0xFF10B981).withValues(alpha: 0.1)
-                                                  : const Color(0xFFEF4444).withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(12),
+                                                  ? const Color(
+                                                      0xFF457507,
+                                                    ).withValues(alpha: 0.1)
+                                                  : const Color(
+                                                      0xFFEF4444,
+                                                    ).withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                             child: Icon(
-                                              isTimeIn ? Icons.login : Icons.logout,
-                                              color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                              isTimeIn
+                                                  ? Icons.login
+                                                  : Icons.logout,
+                                              color: isTimeIn
+                                                  ? const Color(0xFF457507)
+                                                  : const Color(0xFFEF4444),
                                             ),
                                           ),
                                           const SizedBox(width: 16),
                                           Expanded(
                                             child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
                                                 Text(
                                                   record.student.fullName,
@@ -390,26 +539,48 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                                                 Row(
                                                   children: [
                                                     Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 2,
+                                                          ),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(0xFFF3F4F6),
-                                                        borderRadius: BorderRadius.circular(4),
+                                                        color: const Color(
+                                                          0xFFF3F4F6,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              4,
+                                                            ),
                                                       ),
                                                       child: Text(
                                                         record.student.program,
-                                                        style: const TextStyle(fontSize: 12),
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                        ),
                                                       ),
                                                     ),
                                                     const SizedBox(width: 8),
                                                     Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 2,
+                                                          ),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(0xFFF3F4F6),
-                                                        borderRadius: BorderRadius.circular(4),
+                                                        color: const Color(
+                                                          0xFFF3F4F6,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              4,
+                                                            ),
                                                       ),
                                                       child: Text(
                                                         record.student.year,
-                                                        style: const TextStyle(fontSize: 12),
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
@@ -418,11 +589,15 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                                             ),
                                           ),
                                           Column(
-                                            crossAxisAlignment: CrossAxisAlignment.end,
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Text(
-                                                timeFormat.format(record.timestamp),
+                                                timeFormat.format(
+                                                  record.timestamp,
+                                                ),
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 16,
@@ -431,10 +606,17 @@ class _AttendanceDayScreenState extends State<AttendanceDayScreen> {
                                               ),
                                               const SizedBox(height: 4),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 4,
+                                                    ),
                                                 decoration: BoxDecoration(
-                                                  color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  color: isTimeIn
+                                                      ? const Color(0xFF457507)
+                                                      : const Color(0xFFEF4444),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
                                                 child: Text(
                                                   isTimeIn ? 'IN' : 'OUT',

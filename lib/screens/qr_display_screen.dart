@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/student.dart';
 
 class QrDisplayScreen extends StatelessWidget {
@@ -10,38 +11,27 @@ class QrDisplayScreen extends StatelessWidget {
   final GlobalKey _qrKey = GlobalKey();
   final VoidCallback? onDelete;
 
-  QrDisplayScreen({
-    super.key, 
-    required this.student,
-    this.onDelete,
-  });
+  QrDisplayScreen({super.key, required this.student, this.onDelete});
 
   Future<void> _downloadQr(BuildContext context) async {
     try {
-      final boundary = _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary =
+          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
 
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
 
-      Directory? directory;
-      
-      if (Platform.isAndroid) {
-        directory = Directory('/storage/emulated/0/Download');
-        if (!await directory.exists()) {
-          directory = Directory('/storage/emulated/0/Downloads');
-        }
-      } else {
-        directory = await _getDownloadsDirectory();
+      final directory = await _getDownloadsDirectory();
+      if (directory == null) {
+        throw Exception('Could not access downloads directory');
       }
-      
-      if (directory == null || !await directory.exists()) {
-        directory = Directory('/storage/emulated/0/Download');
-        await directory.create(recursive: true);
-      }
-      
-      final fileName = '${student.firstName}_${student.middleName}_${student.lastName}.png'.toLowerCase();
+
+      final fileName =
+          '${student.firstName}_${student.middleName}_${student.lastName}.png'
+              .toLowerCase()
+              .replaceAll(' ', '_');
       final file = File('${directory.path}/$fileName');
       await file.writeAsBytes(byteData.buffer.asUint8List());
 
@@ -49,7 +39,7 @@ class QrDisplayScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('QR saved to Downloads/$fileName'),
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: const Color(0xFF457507),
             duration: const Duration(seconds: 4),
           ),
         );
@@ -68,9 +58,28 @@ class QrDisplayScreen extends StatelessWidget {
 
   Future<Directory?> _getDownloadsDirectory() async {
     if (Platform.isAndroid) {
-      return Directory('/storage/emulated/0/Download');
+      final directory = await getExternalStorageDirectory();
+      if (directory != null) {
+        final downloadsPath = directory.path.replaceFirst(
+          RegExp(r'/Android/data/[^/]+/files'),
+          '/Download',
+        );
+        final downloadsDir = Directory(downloadsPath);
+        if (!await downloadsDir.exists()) {
+          downloadsDir.createSync(recursive: true);
+        }
+        return downloadsDir;
+      }
+      final fallbackDir = Directory('/storage/emulated/0/Download');
+      if (!await fallbackDir.exists()) {
+        fallbackDir.createSync(recursive: true);
+      }
+      return fallbackDir;
     }
-    return Directory('/Users/${Platform.environment['USER']}/Downloads');
+    if (Platform.isIOS) {
+      return await getApplicationDocumentsDirectory();
+    }
+    return await getDownloadsDirectory();
   }
 
   @override
@@ -83,7 +92,7 @@ class QrDisplayScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: const Color(0xFF457507),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -129,13 +138,30 @@ class QrDisplayScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.grey[200]!, width: 2),
+                            border: Border.all(
+                              color: Colors.grey[200]!,
+                              width: 2,
+                            ),
                           ),
-                          child: QrImageView(
-                            data: student.toJsonString(),
-                            version: QrVersions.auto,
-                            size: 220.0,
-                            backgroundColor: Colors.white,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              QrImageView(
+                                data: student.toJsonString(),
+                                version: QrVersions.auto,
+                                size: 220.0,
+                                backgroundColor: Colors.white,
+                              ),
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: QrPointerPainter(
+                                      color: const Color(0xFF457507),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -169,7 +195,7 @@ class QrDisplayScreen extends StatelessWidget {
                     icon: const Icon(Icons.download),
                     label: const Text('Download QR Code'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
+                      backgroundColor: const Color(0xFF457507),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -274,7 +300,7 @@ class QrDisplayScreen extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF10B981)),
+          Icon(icon, size: 16, color: const Color(0xFF457507)),
           const SizedBox(width: 4),
           Text(
             text,
@@ -287,4 +313,71 @@ class QrDisplayScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class QrPointerPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double cornerLength;
+  final double padding;
+
+  QrPointerPainter({
+    required this.color,
+    this.strokeWidth = 4.0,
+    this.cornerLength = 30.0,
+    this.padding = 4.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final left = padding;
+    final top = padding;
+    final right = size.width - padding;
+    final bottom = size.height - padding;
+
+    canvas.drawLine(Offset(left, top + cornerLength), Offset(left, top), paint);
+    canvas.drawLine(Offset(left, top), Offset(left + cornerLength, top), paint);
+
+    canvas.drawLine(
+      Offset(right - cornerLength, top),
+      Offset(right, top),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(right, top),
+      Offset(right, top + cornerLength),
+      paint,
+    );
+
+    canvas.drawLine(
+      Offset(left, bottom - cornerLength),
+      Offset(left, bottom),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(left, bottom),
+      Offset(left + cornerLength, bottom),
+      paint,
+    );
+
+    canvas.drawLine(
+      Offset(right - cornerLength, bottom),
+      Offset(right, bottom),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(right, bottom),
+      Offset(right, bottom - cornerLength),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

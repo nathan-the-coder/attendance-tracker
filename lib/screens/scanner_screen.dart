@@ -45,11 +45,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   void _onDetect(BarcodeCapture capture) {
     if (_isProcessing) return;
-    
+
     final List<Barcode> barcodes = capture.barcodes;
     for (final barcode in barcodes) {
       if (barcode.format != BarcodeFormat.qrCode) continue;
-      
+
       final String? code = barcode.rawValue;
       if (code != null && code != _lastScannedCode) {
         _lastScannedCode = code;
@@ -88,25 +88,52 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   void _autoRecordAttendance(Student student) {
     final dayProvider = context.read<DayProvider>();
-    
+
     if (dayProvider.selectedDayId == null) {
       _showErrorSnackBar('Please select a Day first');
       return;
     }
 
-    final AttendanceType type = _selectedFilter == 1 ? AttendanceType.timeIn : AttendanceType.timeOut;
+    final AttendanceType type = _selectedFilter == 1
+        ? AttendanceType.timeIn
+        : AttendanceType.timeOut;
     final dayId = dayProvider.selectedDayId!;
 
-    if (type == AttendanceType.timeIn && dayProvider.hasTimeIn(dayId, student.id)) {
-      _showWarningSnackBar('${student.fullName} already timed in');
+    // Check if student already has this type of attendance for today
+    if (type == AttendanceType.timeIn &&
+        dayProvider.hasTimeIn(dayId, student.id)) {
+      _showDuplicateDialog(
+        student: student,
+        type: type,
+        message:
+            '${student.fullName} already timed in today.\nDo you want to update the time?',
+      );
       return;
     }
 
-    if (type == AttendanceType.timeOut && dayProvider.hasTimeOut(dayId, student.id)) {
-      _showWarningSnackBar('${student.fullName} already timed out');
+    if (type == AttendanceType.timeOut &&
+        dayProvider.hasTimeOut(dayId, student.id)) {
+      _showDuplicateDialog(
+        student: student,
+        type: type,
+        message:
+            '${student.fullName} already timed out today.\nDo you want to update the time?',
+      );
       return;
     }
 
+    // No duplicate - record attendance directly
+    _recordAttendance(dayProvider, dayId, student, type);
+  }
+
+  /// Records attendance to Firestore
+  /// This is called after duplicate check passes
+  void _recordAttendance(
+    DayProvider dayProvider,
+    String dayId,
+    Student student,
+    AttendanceType type,
+  ) {
     final record = AttendanceRecord(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       student: student,
@@ -136,7 +163,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
           ],
         ),
-        backgroundColor: type == AttendanceType.timeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+        backgroundColor: type == AttendanceType.timeIn
+            ? const Color(0xFF457507)
+            : const Color(0xFFEF4444),
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -144,6 +173,53 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
 
     _resetScanner();
+  }
+
+  /// Shows a dialog when duplicate attendance is detected
+  /// Allows user to override (update) or cancel
+  void _showDuplicateDialog({
+    required Student student,
+    required AttendanceType type,
+    required String message,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber, color: Colors.orange),
+            const SizedBox(width: 8),
+            const Text('Duplicate Entry'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _resetScanner();
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Override: Remove old record and add new one
+              final dayProvider = context.read<DayProvider>();
+              final dayId = dayProvider.selectedDayId!;
+              dayProvider.removeRecord(dayId, student.id, type);
+              _recordAttendance(dayProvider, dayId, student, type);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorSnackBar(String message) {
@@ -157,23 +233,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
           ],
         ),
         backgroundColor: Colors.red,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-    _resetScanner();
-  }
-
-  void _showWarningSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.warning, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(message),
-          ],
-        ),
-        backgroundColor: Colors.orange,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -224,7 +283,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
             margin: const EdgeInsets.all(16),
             height: _isWeb ? 0 : MediaQuery.of(context).size.height * 0.25,
             child: _isWeb
-                ? (_showManualInput ? _buildManualInput() : _buildWebPlaceholder())
+                ? (_showManualInput
+                      ? _buildManualInput()
+                      : _buildWebPlaceholder())
                 : _buildScanner(),
           ),
           Padding(
@@ -238,9 +299,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: _buildRecordsList(),
-          ),
+          Expanded(child: _buildRecordsList()),
         ],
       ),
     );
@@ -265,10 +324,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 hint: const Text('Select Day'),
                 icon: const Icon(Icons.calendar_today, size: 18),
                 items: dayProvider.days.map((day) {
-                  return DropdownMenuItem(
-                    value: day.id,
-                    child: Text(day.name),
-                  );
+                  return DropdownMenuItem(value: day.id, child: Text(day.name));
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -299,10 +355,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         borderRadius: BorderRadius.circular(20),
         child: Stack(
           children: [
-            MobileScanner(
-              controller: _controller,
-              onDetect: _onDetect,
-            ),
+            MobileScanner(controller: _controller, onDetect: _onDetect),
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -320,19 +373,24 @@ class _ScannerScreenState extends State<ScannerScreen> {
               right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: _selectedFilter == 1 
-                        ? const Color(0xFF10B981).withValues(alpha: 0.9)
+                    color: _selectedFilter == 1
+                        ? const Color(0xFF457507).withValues(alpha: 0.9)
                         : const Color(0xFFEF4444).withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    _selectedFilter == 1 ? 'Recording: Time In' : 'Recording: Time Out',
+                    _selectedFilter == 1
+                        ? 'Recording: Time In'
+                        : 'Recording: Time Out',
                     style: const TextStyle(
-                      color: Colors.white, 
-                      fontSize: 14, 
-                      fontWeight: FontWeight.bold
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -448,9 +506,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
         List<AttendanceRecord> filteredRecords;
         if (_selectedFilter == 1) {
-          filteredRecords = day.records.where((r) => r.type == AttendanceType.timeIn).toList();
+          filteredRecords = day.records
+              .where((r) => r.type == AttendanceType.timeIn)
+              .toList();
         } else {
-          filteredRecords = day.records.where((r) => r.type == AttendanceType.timeOut).toList();
+          filteredRecords = day.records
+              .where((r) => r.type == AttendanceType.timeOut)
+              .toList();
         }
 
         if (filteredRecords.isEmpty) {
@@ -491,19 +553,24 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 ],
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 leading: Container(
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
                     color: isTimeIn
-                        ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                        ? const Color(0xFF457507).withValues(alpha: 0.1)
                         : const Color(0xFFEF4444).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     isTimeIn ? Icons.login : Icons.logout,
-                    color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    color: isTimeIn
+                        ? const Color(0xFF457507)
+                        : const Color(0xFFEF4444),
                   ),
                 ),
                 title: Text(
@@ -514,9 +581,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   '${isTimeIn ? "Time In" : "Time Out"} • ${timeFormat.format(record.timestamp)}',
                 ),
                 trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: isTimeIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    color: isTimeIn
+                        ? const Color(0xFF457507)
+                        : const Color(0xFFEF4444),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -538,8 +610,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   Widget _buildFilterButton(int index, String label, IconData icon) {
     final isSelected = _selectedFilter == index;
-    final color = index == 1 ? const Color(0xFF10B981) : const Color(0xFFEF4444);
-    
+    final color = index == 1
+        ? const Color(0xFF457507)
+        : const Color(0xFFEF4444);
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -554,7 +628,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
           border: Border.all(color: isSelected ? color : Colors.grey[300]!),
           boxShadow: [
             BoxShadow(
-              color: isSelected ? color.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.05),
+              color: isSelected
+                  ? color.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
