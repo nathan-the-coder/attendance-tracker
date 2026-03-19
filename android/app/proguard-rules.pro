@@ -13,6 +13,10 @@
 # Cloud Firestore
 -keep class com.google.cloud.firestore.** { *; }
 
+# Play Core Library
+-keep class com.google.android.play.** { *; }
+-keep interface com.google.android.play.** { *; }
+
 # Keep model classes
 -keep class com.example.attendance_checker.models.** { *; }
 
