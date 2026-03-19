@@ -7,7 +7,7 @@ repository: https://github.com/Lazy-Shadow/attendance-tracker
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.10.7
 
 dependencies:
   flutter:
