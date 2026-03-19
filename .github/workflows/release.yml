@@ -73,7 +73,9 @@ jobs:
           esac
           
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "tag_name=v$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "release_name=Release v$NEW_VERSION" >> $GITHUB_OUTPUT
 
@@ -82,10 +84,15 @@ jobs:
           sed -i 's/^version: .*/version: ${{ steps.version.outputs.new_version }}+1/' pubspec.yaml
           cat pubspec.yaml | grep "^version:"
 
-      - name: Update version in build.gradle
+      - name: Update version in build.gradle.kts
         run: |
-          sed -i "s/versionCode [0-9]*/versionCode ${{ steps.version.outputs.new_version }//./ }}/" android/app/build.gradle
-          sed -i "s/versionName \".*\"/versionName \"${{ steps.version.outputs.new_version }}\"/" android/app/build.gradle
+          cd android/app
+          # Get current versionName and replace
+          sed -i "s/versionName = \".*\"/versionName = \"${{ steps.version.outputs.new_version }}\"/" build.gradle.kts
+          # Get current versionCode and replace
+          sed -i "s/versionCode = [0-9]*/versionCode = ${{ steps.version.outputs.version_code }}/" build.gradle.kts
+          cd ../..
+          cat android/app/build.gradle.kts | grep -E "versionName|versionCode"
 
       - name: Build APK (Release)
         run: |
@@ -101,34 +108,11 @@ jobs:
             --obfuscate \
             --split-debug-info=./build/debug-info
 
-      - name: Upload APK
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build/app/outputs/flutter-apk/app-release.apk
-          asset_name: attendance_checker-${{ steps.version.outputs.new_version }}.apk
-          asset_content_type: application/vnd.android.package-archive
-
-      - name: Upload App Bundle
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build/app/outputs/bundle/release/app-release.aab
-          asset_name: attendance_checker-${{ steps.version.outputs.new_version }}.aab
-          asset_content_type: application/octet-stream
-
-      - name: Upload debug symbols
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-symbols-${{ steps.version.outputs.new_version }}
-          path: build/debug-info/
-          retention-days: 30
-
       - name: Commit and tag
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "GitHub Actions"
-          git add pubspec.yaml android/app/build.gradle
+          git add pubspec.yaml android/app/build.gradle.kts
           git commit -m "Bump version to ${{ steps.version.outputs.new_version }}"
           git tag ${{ steps.version.outputs.tag_name }}
           git push --follow-tags
@@ -146,3 +130,11 @@ jobs:
             build/app/outputs/bundle/release/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload debug symbols
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-symbols-${{ steps.version.outputs.new_version }}
+          path: build/debug-info/
+          retention-days: 30
